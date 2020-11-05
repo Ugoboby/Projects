@@ -1,0 +1,976 @@
+---
+title: "Compte Rendu AS 2"
+author: "Hugo Lacauste - Toufik Cheickh"
+date: "06/10/2019"
+output: pdf_document
+---
+
+---
+header-includes: \usepackage{dsfont}\usepackage{setspace}\usepackage{amsmath}\usepackage[utf8]{inputenc}\usepackage[T1]{fontenc}\usepackage[french]{babel}
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+\hypersetup{pdfborder=0 0 0}
+
+\thispagestyle{empty}
+\begin{center}
+\LARGE \textbf{Université de Bordeaux} \normalsize\\ \vfill
+\Large Apprentissage Suppervisée \\
+Master 2- Modélisation Statistique et Stochastique\\ \vspace{0.5\baselineskip}
+\normalsize \vfill
+
+\rule{0.95\textwidth}{2pt}\vspace{0.5\baselineskip}\\
+ \Huge \textbf{TD2 : Analyse Discriminante
+ linéaire et quadraique}\\
+\rule{0.95\textwidth}{2pt}\\ \vfill\normalsize
+\Large \textbf{Cours disposée par Mme Marie Chavent} \\ \vfill
+
+
+\begin{tabular}{ll}
+\textsc{Hugo Lacauste|Toufik Cheickh}
+\end{tabular}
+\end{center}
+\normalsize
+\newpage
+\setcounter{page}{1}
+
+\tableofcontents
+
+\newpage
+
+**Objectifs du TP :**
+\vspace{5mm}
+
+Exercice 1 :
+\begin{itemize}
+  \item{Découvrir l'analyse discriminante linéaire et quadratique.}
+  \item{Découvrir les fonctions R(MASS) lda et qda.}
+  \item{Programmer l'analyse discriminante quadratique}
+\end{itemize}
+Exercice 2 :
+
+  - Faire de la reconnaissance automatique de caractères manuscrits.
+
+Exercice 3 :
+\begin{itemize}
+  \item{Explorer des données par Analyse en Composantes Principales.}
+  \item{Comparer les performances de plusieurs méthodes et choisir la "meilleure".}
+\end{itemize}
+Exercice 4 :
+\begin{itemize}
+  \item{Sélectionner des variables en analyse discriminante linéaire.}
+  \item{Evaluer si la sélection de variable détériore la qualité des prédictions.}
+\end{itemize}
+Exercice 5 :
+
+  - Construire le score de Fisher.
+  
+Exercice 6 :
+
+  - Règle géommetrique de classement
+
+
+\newpage
+
+# 1. Exercice 1
+
+Chargement des données.
+
+```{r echo=FALSE}
+train <- read.table(file="synth_train.txt", header=TRUE)
+Xtrain <- train[,-1]
+Ytrain <- train$y
+plot(Xtrain, pch=Ytrain, col=Ytrain)
+legend("topleft", legend=c("classe1", "classe2"), pch=1:2, col=1:2)
+```
+
+## 1) Calcul des estimateurs gaussiens.
+
+En analyse discriminante quadratique, nous faisons l'hypothèse paramétrique gaussienne : $X|Y = k \sim \mathcal{N}(\mu_k, \Sigma_k)$. La densité (conditionnelle) assoicée à cette loi est donc : 
+$$f(x|Y=k) = \frac{1}{(2\pi)^{p/2} |\Sigma_k|^{1/2}}\exp{\left(\frac 1 2 (x-\mu_k)^t\Sigma_k^{-1}(x-\mu_k)\right)}$$
+```{r echo=FALSE}
+Class1 <- which(Ytrain == 1)
+mu1 <- apply(Xtrain[Class1,],2,mean)
+print("mu1 =")
+mu1
+Class2 <-which(Ytrain == 2)
+mu2 <- apply(Xtrain[Class2,],2,mean)
+print("mu2 =")
+mu2
+Sigma1 <- var(Xtrain[Class1,])
+Sigma2 <- var(Xtrain[Class2,])
+print("Sigma1 =")
+Sigma1
+print("Sigma2 =")
+Sigma2
+Pi1 <- sum(Ytrain==1)/length(Ytrain)
+Pi2 <- sum(Ytrain==2)/length(Ytrain)
+print("Pi1 =")
+Pi1
+print("Pi2 =")
+Pi2
+```
+
+## 2) Prédictions de la valeur (0;1) avec la methode d'analyse discriminante quadratique
+
+En se servant de l'hypothèse gaussienne on cherche maintenant à calculer une prediction pour $x=(1,0)$, à l'aide de l'analyse discriminante quadratique, que l'on obtient par la formule suivante : 
+$$Q_l(x) = -\frac 1 2 \log |\Sigma_l| - \frac 1 2 (x-\mu_l)^t \Sigma_l^{-1} (x-\mu_l) + \log(\pi_l)$$
+
+Où $l$ correspond à la classe et $x$ aux valeurs prises par les variables $\mu_l$ au vecteur moyenne des variables, ou colonnes, et $\Sigma_l$ à la matrice de covariance entre les diférentes variables. Pour le calcul éffectué plus haut on a choisi l'éstimateur des moindre carrés qui est l'estimateur du maximum de vraissemblance. On utilise la fonction var() de $$\textit{R}$$ qui nous donne la valeur corrigé de la variance, pour un estimateur non-biaisé.
+
+
+```{r echo=FALSE}
+Xhat <- c(0,1)
+Q1 <- -0.5*log(det(Sigma1))-0.5*(t(Xhat-mu1))%*%solve(Sigma1)%*%(Xhat-mu1) + log(Pi1)
+Q2 <- -0.5*log(det(Sigma2))-0.5*(t(Xhat-mu2))%*%solve(Sigma2)%*%(Xhat-mu2) + log(Pi2)
+```
+
+On obtient donc les valeurs de l'analyse discriminante suivante : 
+```{r echo=FALSE}
+print("Q1 = ")
+Q1
+print("Q2 = ")
+Q2
+```
+
+On a bien que Q2 > Q1, donc d'apreès l'hypothése gaussienne suivi par l'analyse discriminante on reclasifie bien (0,1) dans la classe 2.
+
+## 3) Calcul de la probabilité a posteriori pour chaque classe
+
+Ici on s'interesse à estimer la probabilité de classé le point $x = (1,0)$) dans chacune des $k=2$ classes on utilise donc la formule pour le calcul de la proba donnée par : 
+
+$$\mathbb{P}(Y=l|X=x) = \frac{\exp{(Q_l(x))}}{\sum\limits_{i=1,\dots, K}\exp{(Q_i(x))}}$$
+
+```{r echo=FALSE}
+print("Proba d'être dans la classe 1 sachant la nouvelle entrée x")
+p1 <- exp(Q1)/(exp(Q1)+exp(Q2))
+p1
+print("Proba d'être dans la classe 2 sachant la nouvelle entrée x")
+p2 <- exp(Q2)/(exp(Q1)+exp(Q2))
+p2
+```
+
+ 
+Et l'on retrouve bien la conclusion similaire à ce qui a été écrit plus haut, on peut de plus à présent ajouté l'information que la probabilité avec laquelle on classe $x=(0,1)$ dans la classe 2 est de $$\mathbb{P}(Y=2|X=x) = 0.999$$
+
+## 4) Implémentation d'une fonction d'analyse discriminante quadratique
+
+On se propose de coder par nous même une fonction qui nous donnerais l'estimation des vecteurs de paramètres pour une analyse discriminante quadratique associé à n'importe quelle classification Y sur leurs composantes X.
+
+```{r eval=FALSE}
+adq_estim <- function(X, Y){
+Y <- as.factor(Y)
+n <- length(Y)
+classes <- levels(Y)
+nclasses <- length(classes)
+estim <- list()
+for (k in 1:nclasses){
+  ind <- which(Y==classes[k])
+  pi_hat <- length(ind)/n
+  mu_hat <- colMeans(X[ind,])
+  sigma_hat <- var(X[ind,])
+  estim[[k]] <- list(mu=mu_hat, Pi=pi_hat, Sigma=sigma_hat)
+}
+out <- estim
+}
+```
+
+Et on vérifie que l'on retrouve les mêmes résultats que ce que nous avions calculer plus haut :
+
+```{r echo=FALSE}
+adq_estim <- function(X, Y){
+Y <- as.factor(Y)
+n <- length(Y)
+classes <- levels(Y)
+nclasses <- length(classes)
+estim <- list()
+for (k in 1:nclasses){
+  ind <- which(Y==classes[k])
+  pi_hat <- length(ind)/n
+  mu_hat <- colMeans(X[ind,])
+  sigma_hat <- var(X[ind,])
+  estim[[k]] <- list(mu=mu_hat, Pi=pi_hat, Sigma=sigma_hat)
+}
+out <- estim
+}
+theta <- adq_estim(Xtrain, Ytrain)
+theta
+```
+
+Les résultats trouvés avec notre fonction sont en accords avec ceux que nous avions trouvé manuellement, ce qui nous encourage dans le fait de penser que notre fonction fonctionne. 
+
+## 5) Implémentation de la fonction de prediction sur l'analyse discriminante quadratique
+
+En se servant de la fonction adq_estim, on code une fonction de prediction de nouvelles valeurs
+
+```{r}
+adq_predict <- function(theta, X_new){
+ classe <- length(theta) 
+ X_new <- matrix(X_new, nrow = 1, ncol = classe)
+ n <- nrow(X_new)
+ q <- matrix(NA, ncol = classe, nrow = n)
+ for (k in 1:classe){
+   mu <- theta[[k]]$mu
+   Sigma <- theta[[k]]$Sigma
+   pi <- theta[[k]]$Pi
+   for (i in 1:n){
+    q[i,k] <- -1/2*(log(det(Sigma)))-1/2*(X_new-mu)%*%solve(Sigma)%*%t(X_new-mu)+log(pi)
+  }
+ }
+ prob <- apply(q,1,  function(x){exp(x)/sum(exp(x))})
+ pred <- apply(q, 1, which.max)
+ levels <- names(theta)
+ pred_levels <- levels[pred]
+ return(list(Q =q, prob_post = t(prob), pred= pred_levels ))
+}
+```
+
+Et l'on compare les résultats de cette fonction aux résultats que l'on a obtenue plus haut.
+
+```{r echo=FALSE}
+adq_predict <- function(theta, X_new){
+ classe <- length(theta) 
+ if (class(X_new) != "matrix"){ X_new <- matrix(X_new, nrow = 1, ncol = classe)}
+ n <- nrow(X_new)
+ q <- matrix(NA, ncol = classe, nrow = n)
+ for (k in 1:classe){
+   mu <- theta[[k]]$mu
+   Sigma <- theta[[k]]$Sigma
+   pi <- theta[[k]]$Pi
+   for (i in 1:n){
+    q[i,k] <- -1/2*(log(det(Sigma)))-1/2*(X_new-mu)%*%solve(Sigma)%*%t(X_new-mu)+log(pi)
+  }
+ }
+ prob <- apply(q,1,  function(x){exp(x)/sum(exp(x))})
+ pred <- apply(prob, 2, which.max)
+ return(list(Q =q, prob_post = t(prob), pred= pred ))
+}
+adq_predict(theta, Xhat)
+```
+
+On retrouve bien que nous reclassifion bien dans la classe 2
+
+## 6) Prédictions des classes et pobabilités 
+
+Nous voulons maintenant prédire les classes ainsi que les probabilité à postériori associée pour la matrice de nouvelles données : 
+$$X = \begin{pmatrix}
+  0&1 \\
+  -2&2
+\end{pmatrix}$$
+
+
+```{r echo=FALSE}
+X_new <- rbind(c(0,1), c(-2,2))
+theta <- adq_estim(Xtrain, Ytrain)
+pred <- adq_predict(theta, Xhat)
+pred
+```
+
+Verfions la cohérence de ces résulats graphiquement :
+
+```{r, echo=FALSE}
+plot(Xtrain, pch=Ytrain, col=Ytrain)
+points(Xhat, col = 'green', pch = 12, lwd = 5)
+```
+
+## 7) Avec la fonction qda de R{MASS}
+
+```{r echo=FALSE}
+library(MASS)
+theta_func <- qda(Xtrain, grouping = as.factor(Ytrain))
+prediction <- predict(theta_func, Xhat)
+prediction
+```
+
+On a bien les mêmes résultats
+
+## 8) Frontière de décision avec la grille utilisée au TP1
+
+Constuction de la grille de points
+
+```{r echo=FALSE}
+a <- seq(from=min(Xtrain$x1), to=max(Xtrain$x1), length.out=100)
+b <- seq(from=min(Xtrain$x2), to=max(Xtrain$x2), length.out=100)
+grille <- NULL
+for(i in a){
+  grille <- rbind(grille, cbind(i,b))
+}
+colnames(grille) <- c("x1","x2")
+```
+
+Construction de la frontiere de décision
+
+```{r echo=FALSE}
+pred_grille <- predict(theta_func, grille, grouping = as.factor(Ytrain))
+plot(grille, pch = 20, col = pred_grille$class, cex = 0.5, main="Frontière de décision pour l'analyse discriminante")
+```
+
+## 9) Estimation de la matrice de covariance sur l'analyse discriminante linéaire.
+
+Ici les matrices de covariances sont supposées égales pour l'analyse discrimante linéaire, on se sert donc de la fonction suivante : 
+
+$$L_l(x)=x^T\Sigma^{-1}\mu_l - \frac{1}{2} \mu_l + \log( \pi_l)$$
+
+Une manière d'obtenir la matrice $\Sigma$ pour l'analyse linéaire est de prendre la moyenne : 
+
+$$\widehat{\Sigma}=\frac{1}{n}\sum\limits_{k=1}^{K}n_k\Sigma_k$$
+
+
+```{r echo=FALSE}
+Sigmahat <- (1/dim(Xtrain)[1])*(dim(Xtrain[Class1,])[1]*Sigma1 + dim(Xtrain[Class1,])[2]*Sigma2)
+print("Matrice de covariance sur la LDA")
+Sigmahat
+```
+
+
+## 10) Prédiction de la nouvelle classe avec l'analyse disciminante linéaire
+
+```{r echo=FALSE}
+Xhat <- c(0,1)
+L1 <- -t(Xhat)%*%solve(Sigmahat)%*%(mu1) - 0.5*(t(mu1)%*%solve(Sigmahat)%*%(mu1)) + log(Pi1)
+L2 <- -t(Xhat)%*%solve(Sigmahat)%*%(mu2) - 0.5*(t(mu2)%*%solve(Sigmahat)%*%(mu2)) + log(Pi2)
+L1
+L2
+```
+
+Et on retrouve bien que L2 > L1, donc par l'analyse discriminante linéaire on reclasifie bien (0,1) dans la classe 2.
+
+## 11) Calcul des probas d'appartenances aux deux diffèrentes classes
+
+Pour l'évaluation des probas on commence par calculer le score de Fisher
+
+```{r}
+ScoreFisher <- L1 - L2
+```
+
+Et on utilise le score pour le calcul de la proba pour l'appartenance aux classes.
+
+```{r echo = FALSE}
+probaC1 <- exp(ScoreFisher)/(1+exp(ScoreFisher))
+probaC2 <- 1-probaC1
+"La proba d'appartenir à la classe 1 est de :"
+probaC1
+"La proba d'appartenir à la classe 2 est de :"
+probaC2
+```
+
+## 12) Estimation avec la fonction lda de R{MASS}
+
+On load et on se renseigne sur les fonctions lda et de predict.lda de R{MASS}
+
+```{r eval=FALSE}
+library(MASS)
+```
+
+Et l'on parametrise la fonction pour obtenir les predictions.
+
+```{r echo = FALSE}
+modellda <- lda(x = Xtrain, grouping = Ytrain)
+Xnew <- rbind(Xhat, c(-2,2))
+pred <- predict(modellda, Xnew)
+pred
+```
+
+On retrouve éffectivement la même classe que précedemment.
+
+## 13) Frontière de décision avec la grille
+
+```{r echo=FALSE}
+pred_grille <- predict(modellda, grille, grouping = as.factor(Ytrain))
+plot(grille, pch = 20, col = pred_grille$class, cex = 0.5, main="Frontière de décision pour l'analyse discriminante linéaire")
+legend("topleft", legend= c("classe 1", "classe 2"), pch=1:2, col=1:2, bg="white")
+```
+
+# 2. Exercice 2
+
+## 1) Chargement des données
+
+```{r}
+data <- read.table("numbers_train.txt", header=TRUE)
+Xtrain <- as.matrix(data[,-1])
+Ytrain <- as.factor(data[,1])
+```
+
+## 2) Visualisation des premières images
+
+```{r}
+par(mfrow=c(3,3))
+for (i in 1:9){
+image(matrix(Xtrain[i,],16,16), col=gray(1:100/100), ylim=c(1,0))
+}
+```
+
+## 3) Prédiction des valeurs par la fonction lda de R{MASS}
+
+On lance la modélisation et on prédit sur le jeu d'apprentissage, on obtient donc un taux d'erreur de :
+
+```{r echo=FALSE}
+modellda <- lda(x = Xtrain, grouping = Ytrain)
+pred <- predict(modellda, Xtrain)
+err <- 0
+for (i in 1:length(Ytrain)){
+  if(pred$class[i]==Ytrain[i]){
+    err=err
+  } else {err=err+1}
+}
+taux_err <- err/length(Ytrain)
+print("Taux d'erreur apprentissage :")
+taux_err
+```
+
+## 4) Chargement des données test
+
+On charge le jeu de données test pour évaluer la qualité de notre modèle de classification
+
+```{r}
+datatest <- read.table("numbers_test.txt", header=TRUE)
+Xtest <- as.matrix(datatest[,-1])
+Ytest <- as.factor(datatest[,1])
+```
+
+## 5) Prediction avec le modèle d'analyse discriminante linéaire
+
+Et on utilise la fonction predict.lda de R{MASS}, pour le calcul du taux d'erreur test
+
+```{r echo=FALSE}
+pred_test <-predict(modellda, Xtest)
+err_test <- 0
+for (i in 1:length(Ytest)){
+  if(pred_test$class[i]==Ytest[i]){
+    err_test=err_test
+  } else {err_test=err_test+1}
+}
+```
+
+Calcul du taux d'erreur test : 
+
+```{r echo=FALSE}
+taux_err_test <- err_test/length(Ytest)
+print("Taux d'erreur test")
+taux_err_test
+```
+
+## 6) Validation croisée avec LOO
+
+On éffectue maintenant une validation croisée avec la méthode LOO.
+
+```{r}
+X <- rbind(as.data.frame(Xtrain), as.data.frame(Xtest))
+Y <- c(Ytrain ,Ytest)
+err = 0
+pred.LOO=NA
+for (i in 1:length(Y)){
+  g <- lda(as.matrix(X[-i,]), Y[-i])
+  pred.LOO[i] <- predict(g, X[i,])$class
+}
+err.LOO = sum(pred.LOO != Y)/length(Y)
+```
+
+## 7) Avec la foction lda.cv
+
+On utilise maintenant l'argument 'CV=TRUE' de la fonction lda de R{MASS}, pour observer si le résultat est le même que précedemment.
+
+```{r}
+g.LOO <- lda(X, Y, CV=T)
+err = sum(g.LOO$class!=Y)/length(Y)
+err
+```
+
+Et on retrouve le même résultat, on peut se rendre compte tout de même que l'argument "CV=TRUE" s'execute en 1 seconde là ou notre code met plusieurs minutes à tourner.
+
+## 8) Avec la validation croisée 5-Folds
+
+Utilisons maintenant la validation croisée 5-Folds
+
+```{r echo=FALSE}
+n_folds <- 5
+folds_i <- sample(rep(1:n_folds, length.out = length(Y)))
+err <- rep(NA, n_folds)
+for (k in 1:n_folds) {
+  test_i <- which(folds_i == k)
+  Xtrain <- X[-test_i, ]
+  Xtest <- X[test_i, ]
+  Ytrain <- Y[-test_i]
+  Ytest <- Y[test_i]
+  g <- lda(as.matrix(Xtrain), Ytrain)
+  pred <- predict(g, Xtest)$class
+  err[k]=sum(pred!=Ytest)/length(Ytest)
+}
+print("5-Folds")
+err
+print("Erreur Moyenne Validation 5-Folds")
+mean(err)
+```
+
+
+
+# Exercice 3
+
+On récupère le jeu de donnée Desbois sur des classifications d'exploitation agricole en deux groupes les exploitations saines ou à risques.
+
+### Chargement des données
+
+```{r}
+load("Desbois_complet.rda")
+```
+
+
+## 1) ACP avec la fonction pca de R{FactoMineR}
+
+On trace le cercle des corrélations et la projection des individus sur les deux premières composantes
+
+```{r echo=FALSE}
+library(FactoMineR)
+X = data[,-1]
+Y = as.factor(data$DIFF)
+res = PCA(data.frame(Y,X), quali.sup = 1, graph = F)
+plot.PCA(res, axes=c(1,2), choix="ind", habillage = 1)
+plot.PCA(res, axes=c(1,2), choix="var")
+```
+
+On observe une vraie séparation des deux classes sur les deux premiers axes retenues de l'ACP une telle séparation sur ces deux catégories est signe que les variables qui discriminisent les exploitations saines et défaillantes, le font de manière claire. Ce constat amène à penser qu'il sera facile de construire une règle de classification
+
+## 2) Découpages en Apprentissage|Test
+
+On découpe le jeu de données en Apprentissage|Test
+
+```{r}
+tr <- sample(1:nrow(X),945)
+Xtrain <- X[tr,]
+Ytrain <- Y[tr]
+Xtest <- X[-tr,]
+Ytest <- Y[-tr]
+```
+
+
+## 3) Courbes ROC avec la méthode LDA
+
+### a) Estimation paramétrique par méthode LDA
+
+```{r echo=FALSE}
+set.seed(20)
+tr <- sample(1:nrow(data),945)
+train <- data[tr,]
+test <- data[-tr,]
+library(MASS)
+library(ROCR)
+```
+
+
+```{r eval=FALSE}
+g <- lda(DIFF~.,data=train)
+print(predict(g,test[,-1])$posterior[1:8,],digit=2)
+```
+
+### b) Calcul d'un score par cette méthode
+
+```{r}
+g <- lda(DIFF~.,data=train)
+print(predict(g,test[,-1])$posterior[1:8,],digit=2)
+score_prob <- predict(g,test[,-1])$posterior[,2]
+```
+
+### c) Et on trace la courbe ROC correspondante
+
+```{r}
+levels(test$DIFF)
+pred <- prediction(score_prob, test$DIFF)
+perf <- performance(pred, "tpr", "fpr", main="Courbe ROC avec méthode LDA")
+plot(perf,colorize=TRUE)
+```
+
+## 4) Courbes ROC et taux d'erreur avec méthodes QDA
+
+```{r echo=FALSE}
+set.seed(20)
+tr <- sample(1:nrow(data),945)
+train <- data[tr,]
+test <- data[-tr,]
+g <- qda(DIFF~.,data=train)
+score_prob <- predict(g,test[,-1])$posterior[,2]
+pred <- prediction(score_prob, test$DIFF)
+perf <- performance(pred, "tpr", "fpr")
+plot(perf,colorize=TRUE, main="Courbe ROC avec méthode QDA") #courbe ROC avec couleur selon les seuils
+```
+
+
+## 5) Comparaison méthodes linéaire|quadratique avec plusieurs découpages et par validation
+
+Nous allons maintenant comparer les taux d'erreur test et les AUC test des méthodes Linéaire et de Quadratique par découpage apprentissage-test B=50 fois.
+
+```{r echo=FALSE}
+B <- 50
+err_test_lda <- rep(NA,B)
+err_test_qda <- rep(NA,B)
+auc_test_lda <- rep(NA,B)
+auc_test_qda <- rep(NA,B)
+for (b in 1:B)
+{
+tr <- sample(1:nrow(data),945)
+train <- data[tr,]
+test <- data[-tr,]
+ #LDA, QDA
+g1 <- lda(DIFF~.,data=train)
+g2 <- qda(DIFF~.,data=train)
+ #Erreur test
+pred_lda <- predict(g1,test[,-1])$class
+err_test_lda[b] <- sum(pred_lda!=test$DIFF)/length(test$DIFF)
+pred_qda <- predict(g2,test[-1])$class
+err_test_qda[b] <- sum(pred_qda!=test$DIFF)/length(test$DIFF)
+ # AUC
+score_lda <- predict(g1,test[,-1])$posterior[,2]
+pred <- prediction(score_lda, test$DIFF)
+auc_test_lda[b] <- performance(pred, "auc")@y.values[[1]]
+score_qda <- predict(g2,test[,-1])$posterior[,2]
+pred <- prediction(score_qda, test$DIFF)
+auc_test_qda[b] <- performance(pred, "auc")@y.values[[1]]
+}
+err_test <- data.frame(lda=err_test_lda,qda=err_test_qda)
+auc_test <- data.frame(lda=auc_test_lda,qda=auc_test_qda)
+boxplot(auc_test)
+```
+
+
+## 6) Evaluation du taux d'erreur par ces mêmes méthodes
+  
+```{r echo=FALSE}
+boxplot(err_test)
+```
+
+La méthode lda minimise l'erreur et maximise l'auc en moyenne, cette méthode est donc préferable. 
+Pour utilisé la méthode QDA, il faut plus de données car y a beaucoup de paramètres à estimer.
+
+
+# Exercice 4
+
+## 1) Découpages Apprentissage|Test avec le jeu de données Desbois
+
+```{r}
+load("Desbois_complet.rda")
+set.seed(40)
+tr <- sample(1:nrow(data),945)
+train <- data[tr,]
+test <- data[-tr,]
+```
+
+## 2) Utilisation de la fonction greedy.Wilks de R{klaR}
+
+```{r}
+library(klaR)
+g <- greedy.wilks(DIFF~.,data=train)
+g$formula
+```
+
+C'est une procèdure de sélection de variables, qui reprend les données sur toute les variables et qui crée plusieurs modèles ajoutant à chaque fois une nouvelle variable dans le modèle et comlparant pour ne garder que les varibales, qui ont un "interer" dans la construction du modèle, on juge digne d'interer les varibales qui ont une probabilité dans la statistique de test de l'hypothèse nulle $\beta_i=0$ inférieur au seuil ('niveau') fixé.
+Le parramètre à fixer est le niveau qui correspond au seuil de décision du test de Fisher. Les variables sélectionnées avec cette méthode sont "R14 + R2 + R32 + R17 + R3 + R7 + R18 + R22 + R36", elles dependent du découpage.
+
+## 3) En fixant le paramètre à 0.1
+
+```{r}
+g1 <- greedy.wilks(DIFF~.,data=train,niveau=0.1)
+g1$formula
+```
+
+Avec le niveau à 0.1, on  selectionne les mêmes sans la R36, le nombre de variables sélectionnées a donc diminuée. Par défaut le niveau est donc fixer au-dessus de 0.1
+
+## 4) Estimation des paramètres & calcul du taux d'erreur test
+
+```{r echo=FALSE}
+pred_wilks1 <- predict(lda(g1$formula,data=data),test)$class
+print("Taux d'erreur Test")
+sum(pred_wilks1!=test$DIFF)/length(test$DIFF)
+```
+
+## 5) Estimation de TOUS les paramètres avec la méthode lda
+
+On reprend maintenant le jeu de donnée dans son intégralité
+
+```{r echo=FALSE}
+pred_wilks1 <- predict(lda(DIFF~.,data=train),test)$class
+print("Taux d'erreur Test")
+sum(pred_wilks1!=test$DIFF)/length(test$DIFF)
+```
+
+
+## 6) Avec un autre découpage Apprentissage|Test
+
+On se décide d'observer l'influence du découpage sur la sélection de variable
+
+```{r echo=FALSE}
+tr <- sample(1:nrow(data),945)
+train <- data[tr,]
+test <- data[-tr,]
+g1 <- greedy.wilks(DIFF~.,data=train,niveau=0.1)
+print("Variables sélectionnées")
+g1$formula
+pred_wilks1 <- predict(lda(g1$formula,data=data),test)$class
+print("Taux d'erreur Test niveau à 0.1")
+sum(pred_wilks1!=test$DIFF)/length(test$DIFF)
+pred_wilks1 <- predict(lda(DIFF~.,data=train),test)$class
+print("Taux d'erreur Test modèle complet")
+sum(pred_wilks1!=test$DIFF)/length(test$DIFF)
+```
+
+On observe donc l'influence du découpages sur la selection des variables et donc sur les erreurs d'estimations. On va donc effectier plusieurs découpages pour avoir une idée plus précise
+
+## 7) Avec une boucle sur 50 découpages, et avec plusieurs 
+
+
+```{r echo=FALSE}
+B <- 50
+p <- ncol(data)-1
+err_test_sel_0.1 <- rep(NA,B)
+err_test_sel_0.2 <- rep(NA,B)
+pred_wilks_O.1 <- rep(NA, length(test))
+pred_wilks_O.2 <- rep(NA, length(test))
+err_test <- rep(NA,B)
+var_sel_0.1 <- c()
+var_sel_0.2 <- c()
+for (b in 1:B){
+tr <- sample(1:nrow(data),945)
+train <- data[tr,]
+test <- data[-tr,]
+g1 <- lda(DIFF~.,data=train)
+g2 <- greedy.wilks(DIFF~.,data=train,niveau=0.1)
+g3 <- greedy.wilks(DIFF~.,data=train,niveau=0.2)
+var_sel_0.1 <- c(var_sel_0.1, as.character(g2$results$vars))
+var_sel_0.2 <- c(var_sel_0.2, as.character(g3$results$vars))
+pred <- predict(g1,test[,-1])$class
+err_test[b] <- sum(pred!=test$DIFF)/length(test$DIFF)
+pred_wilks_0.1 <- predict(lda(g2$formula,data=train),test)$class
+pred_wilks_0.2 <- predict(lda(g3$formula,data=train),test)$class
+err_test_sel_0.1[b] <- sum(pred_wilks_0.1!=test$DIFF)/length(test$DIFF)
+err_test_sel_0.2[b] <- sum(pred_wilks_0.2!=test$DIFF)/length(test$DIFF)
+}
+barplot(sort(table(var_sel_0.1)/(B-1), decreasing=T))
+barplot(sort(table(var_sel_0.2)/(B-1), decreasing=T))
+boxplot(cbind(err_test,err_test_sel_0.1, err_test_sel_0.2), names=c("lda", "lda_0.1", "lda_0.2"), main="B=50 découpage")
+```
+
+
+On observe que les critère R14, R17, R3 et, R32 ont tout le temps été sélectionné sur les 50 découpages. On remarque également que les méthodes nous donne des taux d'erreur test assez similaires, on peut donc se dire que la méthode la moins couteuse serait la meilleur vu que les résultats sont similaires, ici moins coûteuses signifie moins de variables sélectionnées, donc niveau le plus bas à savoir 0.1 
+
+## 8) Prédiction avec methode LDA et selection greedy.wilks avec un niveau à 0.1
+
+C'est donc tout naturellement que nous reprenons la méthode avec un niveau à 0.1, pour savoir les variables que nous récupèrons, nous nous devons d'etablier une règle de selection sur les 50 découpages prècedent, on peut choisir un seuil de % pour lequel les variables séléctionnées sur les découpages vont être retenues dans notre modèle, par exemple si ce seuil est à 100%, on ne selectionne que R14, R17, R3, R32. Si on s'accorde un seuil à 80%, on y ajoute R1, R2, R21, et R7. 
+Notre objectif étant de sélectionner le moins de variables possible, nous nous décidons à un seuil à 95% du temps, ce qui nous donne les variables R14, R17, R3 et, R32.
+On construit donc ce modèle et l'on prédit la classe du 3ème individu.
+
+```{r}
+(table(var_sel_0.1)/(B-1) > 0.95)
+g <- lda(DIFF~R1+R14+R17+R3+R32, data=data[-3,])
+pred <- predict(g,data[3,-1])$class
+pred
+data[3,1]
+```
+ On classifie donc la 3eme exploitattion dans la classe 0 qui est sa vraie classe.
+ 
+# Exercice 5
+
+## 1) Découpage Apprentissage|Test
+
+```{r}
+load("Desbois_complet.rda")
+X <- data[,-1]
+Y <- data$DIFF
+Y <- as.factor(Y)
+set.seed(10)
+tr <- sample(1:nrow(X),945)
+varsel <-c("R1","R14","R17","R32", "R3")
+Xtrain <- X[tr,varsel] 
+Ytrain <- Y[tr]
+Xtest <- X[-tr,varsel] 
+Ytest <- Y[-tr]
+```
+
+## 2) Estimation des paramètres de l'analyse discriminante linéaire
+
+
+```{r echo=FALSE}
+adq_estim <- function(X, Y){
+Y <- as.factor(Y)
+n <- length(Y)
+classes <- levels(Y)
+nclasses <- length(classes)
+estim <- list()
+for (k in 1:nclasses){
+  ind <- which(Y==classes[k])
+  pi_hat <- length(ind)/n
+  mu_hat <- colMeans(X[ind,])
+  sigma_hat <- var(X[ind,])
+  estim[[k]] <- list(mu=mu_hat, Pi=pi_hat, Sigma=sigma_hat)
+}
+out <- estim
+}
+theta <- adq_estim(Xtrain, Ytrain)
+theta
+pi0 <- theta[[1]]$Pi
+print("Pi0=")
+pi0
+pi1 <- theta[[2]]$Pi
+print("Pi1=")
+pi1
+sigma0 <- theta[[1]]$Sigma
+sigma1 <- theta[[2]]$Sigma
+mu0 <- theta[[1]]$mu
+print("mu0=")
+mu0
+mu1 <- theta[[2]]$mu
+print("mu1=")
+mu1
+Sigma <- as.vector(pi0) * as.matrix(sigma0) + as.vector(pi1) * as.matrix(sigma1)
+print("Sigma =")
+Sigma
+```
+
+
+## 3) Calcul des coefficients du score de Fisher
+
+```{r echo=FALSE}
+invsigma <- solve(Sigma)
+const0 <- -(1/2)*mu0%*%invsigma%*%mu0
+const1 <- -(1/2)*mu1%*%invsigma%*%mu1
+const <- c(const0,const1)
+beta <- invsigma %*% cbind(mu0,mu1)
+L <- rbind(const,beta); L
+Delta <- L[,2,drop=FALSE]-L[, 1, drop=FALSE];Delta
+colnames(Delta) <- "Fisher"
+Delta
+```
+
+## 4) Score de Fisher des données test
+
+```{r echo=FALSE}
+Score.Fisher <- as.matrix(cbind (rep(1,length(Ytest)), Xtest)) %*%Delta
+Grands = sort(Score.Fisher, decreasing = T)[1:5]
+Val.Grands = rep(NA, length(Grands))
+for (i in 1: length(Grands)){
+  Val.Grands[i] = which(Score.Fisher == Grands[i]) 
+}
+print( "5 Exploitations avec le plus grands score de Fisher")
+Val.Grands
+```
+
+
+## 5) Prediction à partir de ce score
+
+```{r}
+pred <- rep(NA, length(Score.Fisher))
+for (i in 1:length(Score.Fisher)){
+  if (as.vector(Score.Fisher)[i]<0){pred[i]=0}else{pred[i]=1}
+}
+summary(pred)
+```
+
+## 6) Calul de la probabilité à posteriori
+
+On reprend la formule des probabilités à posteriori à partir du score de Fisher pour les 5 exploitations agricoles les plus à risques.
+
+$$\mathbb{P}(Y=1|X=x) = \frac{\exp{(\Delta(x))}}{1+\exp{(\Delta(x))}}$$
+
+```{r echo=FALSE}
+prob <- rep(NA, length(Val.Grands))
+for (i in 1: length(Val.Grands)){
+  prob[i] = exp(as.matrix(cbind(1, X[Val.Grands[i],varsel])) %*% Delta)/(1+exp(as.matrix(cbind(1, X[Val.Grands[i],varsel])) %*% Delta))
+}
+prob
+```
+
+Et avec la fonction lda
+
+```{r echo=FALSE}
+g <- lda(DIFF~R1+R14+R17+R3+R32, data=data[-Val.Grands,])
+prob <- predict(g,data[Val.Grands,-1])$posterior
+prob
+
+```
+
+On retrouve à peu près les mêmes résultats.
+
+
+## 7) Fonction LDA ~~ Règle géometrique
+
+Dans la fonction lda, on peut fixer les probas à priori en amont pour pouvoir obtenir une régle de classification géometrique.
+
+# Exercice 6
+
+## 1) Nom de la distance
+
+La distance :
+$$ D_k(x) = (x-\mu_k)^{T}\Sigma^{-1}(x-\mu_k) $$
+Cette distance s'appelle la distance de \bf{Mahalanobis}
+
+## 5) Calcul de la distance pour les deux classes avec la 5ème exploitations
+
+```{r echo=FALSE}
+load("Desbois_complet.rda")
+X <- data[,-1]
+Y <- data$DIFF
+Y <- as.factor(Y)
+set.seed(10)
+tr <- sample(1:nrow(X),945)
+varsel <-c("R1","R14","R17","R32", "R3")
+Xtrain <- X[tr,varsel] 
+Ytrain <- Y[tr]
+Xtest <- X[-tr,varsel] 
+Ytest <- Y[-tr]
+adq_estim <- function(X, Y){
+Y <- as.factor(Y)
+n <- length(Y)
+classes <- levels(Y)
+nclasses <- length(classes)
+estim <- list()
+for (k in 1:nclasses){
+  ind <- which(Y==classes[k])
+  pi_hat <- length(ind)/n
+  mu_hat <- colMeans(X[ind,])
+  sigma_hat <- var(X[ind,])
+  estim[[k]] <- list(mu=mu_hat, Pi=pi_hat, Sigma=sigma_hat)
+}
+out <- estim
+}
+theta <- adq_estim(Xtrain, Ytrain)
+theta
+pi0 <- theta[[1]]$Pi
+print("Pi0=")
+pi0
+pi1 <- theta[[2]]$Pi
+print("Pi1=")
+pi1
+sigma0 <- theta[[1]]$Sigma
+sigma1 <- theta[[2]]$Sigma
+mu0 <- theta[[1]]$mu
+print("mu0=")
+mu0
+mu1 <- theta[[2]]$mu
+print("mu1=")
+mu1
+Sigma <- as.vector(pi0) * as.matrix(sigma0) + as.vector(pi1) * as.matrix(sigma1)
+print("Sigma =")
+Sigma
+```
+
+```{r}
+D0 = (as.matrix(X[5,varsel])-mu0)%*%as.matrix(solve(Sigma))%*%t(as.matrix(X[5,varsel])-mu0)
+D1 = (as.matrix(X[5,varsel])-mu1)%*%as.matrix(solve(Sigma))%*%t(as.matrix(X[5,varsel])-mu1)
+D1
+D0
+```
+
+On a D0<D1 donc l'exploitation 5 est plus proche de la classe 0, on la reclasse donc dans la classe 0
+
+## 6) Calcul des probas à posteriori avec la distance
+
+On se sertt de la formule : 
+
+$$\mathbb{P}(Y=k|X=x) = \frac{\exp{\frac{-1}{2}(D_k(x))}}{\sum\limits_{l=1}^{K}\exp{\frac{1}{2}(D_l(x))}}$$
+
+On veut calculer la probabilité à postériori que cette exploitation soit défaillantes
+
+```{r}
+prob <- exp(-0.5*D0)/(exp(0.5*D0)+exp(0.5*D1))
+prob
+```
+
