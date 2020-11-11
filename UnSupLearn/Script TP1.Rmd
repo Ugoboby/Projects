@@ -1,0 +1,290 @@
+---
+title: "TP1_Data Mining"
+author: "Hugo Lacauste"
+date: "24/09/2019"
+output: html_document
+---
+
+I] Exemple d'applications
+
+  On démarre par charger les données d'eaux sur lesquelles nous allons effectuer l'ACP
+Il s'agit d'un jeu de données décrivant 8 eaux minérales par 8 variables de saveurs
+
+```{r setup, include=FALSE}
+load("eaux.rda")
+print(data[,1:3])
+X <- data # original quantitative data matrix
+dim(X)
+```
+
+1. Descriptions Bivariées, analyses de distances et de corrélations entre les variables
+
+On trace maintenant le nuage de points par pairs de variables
+
+```{r}
+pairs(data[,1:5])
+install.packages("GGally")
+library(GGally)
+ggpairs(data[,1:5])
+```
+
+Ainsi que la matrice de distance et de corrélation
+
+```{r}
+dist(data)
+cor(data[,1:5])
+```
+
+Calcul de la distance entre St Yorre et Vichy
+
+```{r}
+sqrt(sum((data[1,]-data[3,])^2))
+```
+
+2. Centrage et Réduction des données
+
+Calcul de l'éspèrance et de la variance
+```{r}
+m <- apply(X,2,mean) #mean
+print(m,digits=3)
+s <- apply(X,2,sd) #standard deviation
+print(s,digits=3)
+```
+
+Centrage des données
+
+```{r}
+Y <- sweep(X,2,m,"-")
+apply(Y,2,mean)
+apply(Y,2,sd)
+Y
+```
+
+On calcul maintenant la matrice de covariance avec la formule $\frac{1}{n}Y^{T}Y$
+
+```{r}
+n = length(X)
+(t(as.matrix(Y))%*%as.matrix(Y)/n)[1,2]
+cov(X)[1,2]
+all.equal(cov(X),t(as.matrix(Y))%*%as.matrix(Y)/n)
+#Modifie la formule de la matrice de corrélation pour trouver le même résultats.
+(t(as.matrix(Y))%*%as.matrix(Y)/(n-1))[1,2]
+cov(X)[1,2]
+all.equal(cov(X),t(as.matrix(Y))%*%as.matrix(Y)/(n-1))
+```
+
+Données Standardisées
+
+```{r}
+Z <- sweep(Y,2,s,"/")
+apply(Z,2,mean)
+apply(Z,2,sd)
+```
+
+Et on a la matrice de corrélations obtenues par \frac{1}{n}Z^{T}Z
+
+```{r}
+(t(as.matrix(Z))%*%as.matrix(Z)/n)[1,2]
+cor(X)[1,2]
+all.equal(cor(X),t(as.matrix(Z))%*%as.matrix(Z)/n)
+```
+
+On réduit les données maintenant avec l'écart type non corrigé
+
+```{r}
+s <- apply(X,2,sd)*sqrt((n-1)/n) #écart type non corrigé
+print(s,digits=3)
+Z <- sweep(Y,2,s,"/")
+apply(Z,2,mean)
+apply(Z,2,sd)*sqrt((n-1)/(n))
+(t(as.matrix(Z))%*%as.matrix(Z)/n)[1,2]
+cor(X)[1,2]
+all.equal(cor(X),t(as.matrix(Z))%*%as.matrix(Z)/n)
+```
+
+3. Analyse en composante principales avec la matrice de corrélations et la matrice de covariances
+
+  En utilisant le package FactoMineR
+  
+```{r}
+library(FactoMineR) # package R liées à l'analyse multivariés
+?PCA
+```
+
+3.1 ACP avec la matrice de covariance
+
+Analyse des lignes et colonnes de la matrice centrée Y avec la décomposition en valeurs propres de la variance C=\frac{1}{n}Y^{T}Y
+```{r}
+res <- PCA(X,graph=FALSE,scale.unit=FALSE) # on précise le scale.unit=FALSE pour la matrice de covariance
+plot(res,choix="ind",cex=0.8,title="")
+plot(res,choix="var",cex=0.8,title="")
+#Give an interpretation of these two plots.
+```
+On a une forte représentation des variables à grandes variances liées au fait que les données ne sont pas réduites.
+On remarques également que sur cette première composante les eaux Perrier et Vichy sont extrêment différentes, car en effervescence et crépitement la variable la plus représentée.
+
+3.2 ACP avec la matrice de corrélation
+
+```{r}
+res <- PCA(X,graph=FALSE) # Avec les données originales
+plot(res,choix="ind",cex=0.8,title="")
+plot(res,choix="var",cex=0.8,title="")
+plot(res,choix="ind",cex=0.8,title="", axes = c(3,4))
+plot(res,choix="var",cex=0.8,title="", axes = c(3,4))
+```
+
+```{r}
+F <- res$ind$coord
+print(F[1:4,],digits=2)
+#plot the observations on the first principal component plan using F
+axes <- c(1,2)
+plot(F[,axes],pch=19,col=4,cex=1)
+abline(h=0,lty=2)
+abline(v=0,lty=2)
+text(F[,axes],labels=rownames(Z),pos=3,col=4,cex=1)
+```
+
+Récupération des valeurs propres
+
+```{r}
+res$eig[,1]
+#calculate the variance of the columns of F
+n <- nrow(X)
+apply(F,2,var)*(n-1)/n
+```
+
+
+```{r}
+A <- res$var$coord
+print(A[1:4,],digits=2)
+#plot the variables on the first principal component map using A
+axes <- c(1,2)
+plot(A[,axes],pch=19,col=4,cex=1)
+abline(h=0,lty=2)
+abline(v=0,lty=2)
+text(A[,axes],labels=colnames(Z),pos=3,col=4,cex=1)
+```
+ 
+ On vérifie ensuite que les loadings sont bien les corrélations entre les composantes principales
+La corrélation entre la première variable et la première composantes se retrouve dans la matrice A des loadings 
+
+```{r}
+A[,1]
+# calculate the correlations between the first principal component and the 13 variables.
+cor(X[,1],F[,1])
+cor(X,F[,1])
+```
+
+3.3 Analyse des composantes principales avec une nouvelle fonction de R
+
+```{r}
+?princomp
+#pr <- princomp(X,cor=T) # sur matrice de covariance
+?prcomp
+pr <- prcomp(X,scale=TRUE) # sur matrice de covariance avec SVD pour calculer les valeurs propres
+pr$sdev^2 # Pour récupérer les valeurs propres
+```
+
+4. Analyse en composante principale "à la main".
+
+  4.1. Via une décomposition en valeurs propre de C ou de R
+```{r}
+R <- t(as.matrix(Z))%*%as.matrix(Z)/7
+## On peut effectuer une decomposition en valeurs propres de L obtenus par Z*t(Z)/n
+e <- eigen(R)
+names(e)
+dim(e$vectors)
+# Matrice des 3 premieres composantes
+q <- 3
+V <- e$vectors[,1:q]
+Fbis <- as.matrix(Z)%*%V
+head(Fbis)
+head(F[,1:q]) # Comparaison avec la fonction PCA
+```
+  
+On remarque que la deuxième composante principale dans notre calcul à la main et l'opposé de la composante principale obtenue par la fonction
+On ressort maintenant les valeurs propres
+
+```{r}
+e$values[1:q]
+res$eig[1:q,1] #fonction PCA
+```
+
+On découpe maintenant à l'aide d'une SVD sur une métrique
+
+```{r}
+#calcul de la matrice Z sur des données non réduites
+s <- apply(Y,2,sd)*sqrt((n-1)/n)
+Z <- sweep(Y,2,s,"/")
+e_svd <- svd(Z) # SVD non géneralisée avec N = 1n et M = 1p
+names(e_svd)
+(e_svd$d^2)[1:q]/n # On divise par n pour récupèrer la metrique
+res$eig[1:q,1] # On récupère les valeurs propres de la fonction PCA
+U <- e_svd$u[,1:q] # Martice des q premiers vecteurs propres
+Fbisbis <- U%*%diag(e_svd$d[1:q]) # Composants principales
+head(Fbisbis)
+head(F[,1:q]) #Composantes principales par la fonction PCA
+```
+
+5. Interpretation des résultats
+
+Eboulis des valeurs propres
+
+```{r}
+barplot(res$eig[,1])
+```
+
+
+
+On sort tout d'abord les 3 individus les mieux projetés
+```{r}
+res$ind$cos2[,1:3]
+plot(res,choix="ind",cex=1.5,title="",select="cos2 3")
+```
+
+ANsi que les 3 individus qui contribuent le plus à la création des composantes.
+
+```{r}
+res$ind$contrib[,1:3]
+plot(res,choix="ind",cex=1.5,title="",select="contrib 3")
+```
+
+
+Coordonnées des individus projetés
+
+
+```{r}
+res$ind$coord[,1:3]
+```
+
+5.3 Projection des variables sur un plan
+
+Cercle de corrélation
+```{r}
+res$var$coord[,1:2]
+plot(res,choix="var",title="",cex=1)
+```
+
+Interpretation de la projection sur le plan des individus
+
+```{r}
+plot(res,choix="ind",title="",cex=1)
+```
+
+II] Effet de taille 
+
+Sur un jeu de données de poissons contaminés au mercure
+
+```{r}
+load("poissons.rda")
+datalog <- data
+datalog[,5:10] <- log(data[,5:10])
+res <- PCA(datalog[,-1],quanti.sup=2:3,quali.sup=1,graph=FALSE)
+plot(res,choix="var",title="")
+plot(res,choix="ind",invisible = "quali",label = "none",habillage=1,title ="")
+```
+Deux soucis dans ces données, variables très corrélées entre elles les variables sont très asymétrique, on va prendre fortement en compte les données qui ont des valeurs trop élevées en comparaison des autres, une solution est de prendre le log des données.
+
+Le second problème vient du fait que toutes les variables vont dans la même dirrection, en effet, ici plus le poisson est gros plus les mesures éffectués sur son fois vont avoir des valeurs plus grandes, toutes les variables sont corrélées. Pour contrer cette effet taille, on peut effectuer une ACP sur un rapport.
+
+
