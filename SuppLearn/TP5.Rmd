@@ -1,0 +1,64 @@
+---
+header-includes: \usepackage{dsfont}\usepackage{setspace}\usepackage{amsmath}\usepackage[utf8]{inputenc}\usepackage[T1]{fontenc}\usepackage[french]{babel}
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+\hypersetup{pdfborder=0 0 0}
+
+\thispagestyle{empty}
+\begin{center}
+\LARGE \textbf{Université de Bordeaux} \normalsize\\ \vfill
+\Large Apprentissage Suppervisée \\
+Master 2 - Modélisation Statistique et Stochastique\\ \vspace{0.5\baselineskip}
+\normalsize \vfill
+
+\rule{0.95\textwidth}{2pt}\vspace{0.5\baselineskip}\\
+ \Huge \textbf{TP5 : Arbres de classification}\\
+\rule{0.95\textwidth}{2pt}\\ \vfill\normalsize
+\Large \textbf{Cours de Mme Marie Chavent} \\ \vfill
+
+
+\begin{tabular}{ll}
+\textsc{Cheick Toufik et Lacauste Hugo}
+\end{tabular}
+\end{center}
+\normalsize
+\newpage
+\setcounter{page}{1}
+
+\newpage
+
+# Exercice 1
+
+On démarre l'étude d'arbre de classification en repartant des jeux de données synth_train et synth_test et l'on se sert de la fonction rpart et rpart.control de R{rpart}
+
+```{r}
+library(rpart)
+?rpart
+?rpart.control
+```
+
+```{r}
+Train <- read.table("synth_train.txt", header = T)
+Test <- read.table("synth_test.txt", header = T)
+Ytrain = Train[,1]
+Xtrain = as.matrix(Train[,-1])
+Ytest = Test[,1]
+Xtest = as.matrix(Test[,-1])
+```
+
+La fonction rpart utilise l'algorithme décrit dans la méthode CART, il subdivise les individus à classifier en fonction  de l'expression booléene sur une variable. Il est appliqué pour une classification binaire à 2 facteurs et utilise le découpage qui maximise la diminution de l'impureté, défini par :
+
+$$\Delta(t_L, t_R)=i(t)-p_Li(t_L)-p_Ri(t_R)$$
+
+où $p_l$ et $p_R$ sont les proportions d’observations de t partant dans le noeud gauche $t_L$ et dans le noeud droit $t_R$. Alors que la fonction i(), représente l'indice de Gini mesure d'efficacité de la séparation en deux branches. On définit ce critère de la façon suivante : 
+
+$$i(t) = \sum\limits_{k=1}^{K}p_{t,k}(1-p_{t,k})=1-\sum\limits_{k=1}^{K}p_{t,k}^2$$
+
+Ou encore la mesure d'entropie qui se définit comme suit :
+
+$$i(t) = -\sum\limits_{k=1}^{K}p_{t,k}log_2(p_{t,k})$$
+
+Par défaut, la fonction rpart se sert donc de la 

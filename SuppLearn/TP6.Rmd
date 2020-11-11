@@ -1,0 +1,150 @@
+---
+header-includes: \usepackage{dsfont}\usepackage{setspace}\usepackage{amsmath}\usepackage[utf8]{inputenc}\usepackage[T1]{fontenc}\usepackage[french]{babel}
+output: pdf_document
+editor_options: 
+chunk_output_type: console
+---
+
+\hypersetup{pdfborder=0 0 0}
+
+\thispagestyle{empty}
+\begin{center}
+\LARGE \textbf{Université de Bordeaux} \normalsize\\ \vfill
+\Large Apprentissage Suppervisée \\
+Master 2 - Modélisation Statistique et Stochastique\\ \vspace{0.5\baselineskip}
+\normalsize \vfill
+
+\rule{0.95\textwidth}{2pt}\vspace{0.5\baselineskip}\\
+ \Huge \textbf{TP6 : Forets Aléatoire}\\
+\rule{0.95\textwidth}{2pt}\\ \vfill\normalsize
+\Large \textbf{Cours de Mme Marie Chavent} \\ \vfill
+
+
+\begin{tabular}{ll}
+\textsc{Cheick Toufik et Lacauste Hugo}
+\end{tabular}
+\end{center}
+\normalsize
+\newpage
+\setcounter{page}{1}
+
+\newpage
+
+# Exercice 1
+
+## 1. Chargement des données classiques synth_train et changement en facteur
+
+```{r}
+data <- read.table("synth_train.txt", header = T)
+data$y <- as.factor(data$y)
+```
+
+## 2. Chargement du package randomForest
+
+```{r}
+library(randomForest)
+```
+
+Création de la foret aléatoire
+
+```{r}
+g <- randomForest(data, subset=c(2,3))
+g1 <- randomForest(y~., data, importance=T)
+summary(g)
+```
+
+## 3. Résutats
+
+```{r}
+print(g1)
+```
+
+Le print nous affiche la matrice de confusion pour les erreurs de validation OOB, sur les données Out Of Bag, cette matrice est obtenue avec la méthode de prediction sur les OOB.
+
+```{r}
+g1$predicted # valeurs prédites
+g1$confusion # Matrice de confusion OOB 
+g1$importance # Augmenttation moyenne sur les 500 arbres du taux d'erreur OOB causé par les (une-)permutations des Xj
+g1$importanceSD # Ecart-type de ces taux d'erreurs.
+varImpPlot(g1)
+g1$votes # Proportion d'arbres pour lesquels l'observation est predite dans chaque classe
+```
+
+
+## 4. Explication des valeurs de la fonction random forest
+
+```{r}
+head(g1$oob.times)
+head(g1$err.rate) # Taux d'erreur OOB obtenue avec les i premiers arbres
+g1$err.rate[500,] # On vérifie bien qu'au 500 ème arbre, le dernier on obtient bien les résultats du model
+g1
+plot(g1$err.rate[,"OOB"], type='l')
+```
+
+## 5. Taux d'erreur d'apprentissage
+
+```{r}
+pred <- predict(g1, data)
+sum(pred!=data$y)/length(data$y)
+```
+
+## 6.Taux d'erreur test
+
+```{r}
+test <- read.table("synth_test.txt", header=T)
+pred <- predict(g1, test[,-1])
+sum(pred!=test$y)/length(test$y)
+```
+
+## 7. Changement de paramètrage
+
+```{r}
+bag <- randomForest(x=data[,-1], y=data$y, mtry=2, ntree = 2000)
+bag
+pred.test <- predict(bag, test, type="class")
+sum(pred.test!=test$y)/length(test$y)
+```
+
+\newpage
+
+# Exercice 2
+
+## 1. Chargement du jeu de données
+
+```{r}
+load("desbois_complet.rda")
+```
+
+## 2. Découpage App|Test
+
+```{r}
+set.seed(10)
+tr <- sample(1:nrow(data),945)
+train <- data[tr,]
+test <- data[-tr,]
+```
+
+## 3. Avec le parramétrage par défaut
+
+```{r}
+rf <- randomForest(x=train[,-1], y=as.factor(train$DIFF))
+rf
+plot(rf$err.rate[,"OOB"], type='l')
+```
+
+
+```{r}
+sqrt(22)
+rf$mtry
+grille<- 1:20
+B<-20
+err_obb<-rep(NA, 20, length(grille))
+for(j in 1:B){
+  for (i in seq(grille)){
+    rf <- randomForest(as.factor(DIFF)~., data=train, mtry = grille[i])
+    err_obb[j,i] <- rf$err.rate[500, 1]
+  } 
+}
+boxplot(err_obb, ylab = "taux d'erreur obb", xlab="mtry")
+```
+

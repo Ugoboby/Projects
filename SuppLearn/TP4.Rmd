@@ -1,0 +1,411 @@
+---
+header-includes: \usepackage{dsfont}\usepackage{setspace}\usepackage{amsmath}\usepackage[utf8]{inputenc}\usepackage[T1]{fontenc}\usepackage[french]{babel}
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+\hypersetup{pdfborder=0 0 0}
+
+\thispagestyle{empty}
+\begin{center}
+\LARGE \textbf{Université de Bordeaux} \normalsize\\ \vfill
+\Large Apprentissage Suppervisée \\
+Master 2 - Modélisation Statistique et Stochastique\\ \vspace{0.5\baselineskip}
+\normalsize \vfill
+
+\rule{0.95\textwidth}{2pt}\vspace{0.5\baselineskip}\\
+ \Huge \textbf{TP4 : Regression logistique}\\
+\rule{0.95\textwidth}{2pt}\\ \vfill\normalsize
+\Large \textbf{Cours disposée par Mme Marie Chavent} \\ \vfill
+
+
+\begin{tabular}{ll}
+\textsc{Cheick Toufik et Lacauste Hugo}
+\end{tabular}
+\end{center}
+\normalsize
+\newpage
+\setcounter{page}{1}
+
+\newpage
+
+# Exercice 1
+
+## 1. Chargement des données et recodages des variables
+
+On se sert à nouveau des jeux de données synth_train et synth_test
+
+```{r}
+Train <- read.table("synth_train.txt", header = T)
+Test <- read.table("synth_test.txt", header = T)
+Ytrain = Train[,1]
+Xtrain = as.matrix(Train[,-1])
+Ytest = Test[,1]
+Xtest = as.matrix(Test[,-1])
+```
+
+Et on recode maintenant les données pour être dans un cadre de régression logistique
+
+```{r}
+Ytrain[Ytrain==1] <- 0
+Ytrain[Ytrain==2] <- 1
+Ytest[Ytest==1] <- 0
+Ytest[Ytest==2] <- 1
+summary(Ytrain)
+summary(Ytest)
+```
+
+## 2. Estimation sur les données avec la fonction glmnet
+
+On va maintenant effectuer une regression logistique avec la fonction de R{stats}, \textit{glm()}
+
+```{r}
+model <- glm(Ytrain ~ x1 +x2, data=data.frame(y=Ytrain, Xtrain), family="binomial")
+model$coefficients
+```
+
+## 3. Explication des coéfficients
+
+Pour l'explication des coéfficients, on peut prendre exemple sur les explications lors de régression linéaire, lorsque le premier composant x1 correspondant au Beta_1 (positif) augmente, on augmente la probabilité de prédire que l'élement est de classe 1, inversement lorsque la seconde composante x2 correspondant au Beta_2 (négatif) augmente, on augmente la probabilité de prédire la classe 0
+
+
+## 4. Prediction de la classe de (0,1)
+
+Avec le score logit
+
+```{r}
+xchap <- c(1,0,1)
+logit <- xchap%*%model$coefficients
+logit
+```
+
+## 5. Affectation avec la proba
+
+```{r}
+proba <- exp(logit)/(1+exp(logit))
+proba
+```
+
+
+## 6. Prediction avec la fonction predict
+
+Avec la fonction \textit{predict()}
+
+```{r}
+xhat <- data.frame(x1=0, x2=1)
+predict(model, newdata=xhat)
+predict(model, newdata=xhat, type = "response")
+```
+
+## 7. Prédire les données d'apprentissage
+
+```{r}
+prob <- predict(model, as.data.frame(Xtrain), type="response")
+pred <- rep(NA, length(prob))
+for (i in 1: length(prob)){
+  if (prob[i] <0.5){
+    pred[i]=0
+  }else {pred[i]=1}
+}
+pred
+```
+
+Et calcul du taux d'erreur d'apprentissage
+
+```{r}
+err_app <- sum(Ytrain!=pred)/length(Ytrain)
+err_app
+```
+
+
+## 8. Grille de décision
+
+```{r}
+a <- seq(from=min(Xtrain[,1]), to=max(Xtrain[,1]), length.out=100)
+b <- seq(from=min(Xtrain[,2]), to=max(Xtrain[,2]), length.out=100)
+grille <- NULL
+for(i in a){
+  grille <- rbind(grille, cbind(i,b))
+}
+colnames(grille) <- c("x1","x2")
+pred_grille<-NA
+prob_grille <- predict(model, as.data.frame(grille), type="response")
+for (i in 1: length(prob_grille)){
+  if (prob_grille[i] <0.5){
+    pred_grille[i]=0
+  }else {pred_grille[i]=1}
+}
+plot(grille, pch = 20, col = (pred_grille+1), cex = 0.5, main="Frontière de décision en regression logistique")
+```
+
+## 9. Calcul du taux d'erreur test
+
+```{r}
+prob <- predict(model, as.data.frame(Xtest), type="response")
+pred <- rep(NA, length(prob))
+for (i in 1: length(prob)){
+  if (prob[i] <0.5){
+    pred[i]=0
+  }else {pred[i]=1}
+}
+err_test <- sum(Ytest!=pred)/length(Ytest)
+err_test
+```
+
+## 10. Corbe ROC et critère auc
+
+```{r}
+library(ROCR) # 3 fonctions : prediction, performance, plot
+score <- predict(model, as.data.frame(Xtest), type="response")
+pred <- prediction(score, Ytest, label.ordering=c("0","1"))
+#label.ordering : indiquer le libellÃ© de la classe negative puis positive.
+perf <- performance(pred, "tpr", "fpr")
+plot(perf) #courbe ROC
+abline(a=0, b=1)
+auc <- performance(pred, "auc")@y.values[[1]]
+print("Score Obtenue par aire sous la courbe ROC")
+auc
+```
+
+# Exercice 2
+
+Chargement des données
+
+```{r}
+load("Desbois_complet.rda")
+X <- data[,-1]
+Y <- data$DIFF
+```
+
+## 1. Estimation par max de vraissemblance
+
+```{r}
+library(glmnet)
+model <- glm(Y ~ R1+R2+R3+R4+R5+R6+R7+R8+R11+R12+R14+R17+R18+R19+R21+R22+R24+R28+R30+R32+R36+R37, data=as.data.frame(y=Y,X), family="binomial") # = glm(Y ~ ., data=as.data.frame(y=Y,X), family="binomial")
+```
+
+On se rend alors compte que toutes les variables ne sont pas utiles, toutes les probas < 0.05 peuvent être omises
+
+## 2. Calcul des scores des données
+
+```{r}
+logit <- as.matrix(1,X)%*%model$coefficients
+hist(logit)
+prob <- predict(model, as.data.frame(X), type="response")
+hist(prob)
+pred <- rep(NA, length(prob))
+for (i in 1: length(prob)){
+  if (prob[i] <0.5){
+    pred[i]=0
+  }else {pred[i]=1}
+}
+pred
+barplot(table(pred)/length(pred))
+```
+
+## 3. Estimation des parramètres avec la fonction glmnet
+
+### (a) Retrouves-t-on les même coeff qu'avec glm() sans pénalisées glmnet
+
+```{r}
+library(glmnet)
+model_np <- glmnet(as.matrix(X), as.vector(Y), family="binomial", standardize = FALSE, intercept = T, lambda = 0)
+model_np$beta
+```
+
+### (b) Regression Ridge
+
+  i.Pour une grille de paramètre $\lambda$
+
+```{r}
+g <- glmnet(as.matrix(X), as.vector(Y), family="binomial", alpha = 0, standardize = F)# Par defaut il prend 100 lambdas
+g$lambda # 
+```
+
+Cette grille de valeur $\lambda$ est définit par pas, les lambdas sont obtenues par 100 découpage de lambda max : 0.0001*lambdamax = lambdamin et lambda max est obtenue lorsque tout les betas sont nuls.
+
+  ii.Avec la fonction coef()
+  
+```{r}
+coef(g)[,1]# Pour la plus grande valeur de lambda
+coef(g)[,100] # Pour la plus petite valeur de lambda
+sum(coef(g)[,1]^2)
+sum(coef(g)[,100]^2)
+```
+
+Et on a bien que la norme 2 des coéfficients pour la plus grande valeur de $\lambda$ est plus petit que la norme 2 des coéfficients pour la plus petite valeur de $\lambda$
+
+  iii. On plot les coéfficients par rapport à $\lambda$
+  
+```{r}
+plot(g, xvar='lambda')
+```
+
+On récupère donc les mêmes conclusions que plus haut, plus le $\lambda$ est petit, plus la norme $\mathbb{L}^2$ est grande, le 22 est le nombre de variables retenues dans le modèle.
+
+  iv. Choix du lambda par validation croisée
+
+```{r}
+g <- cv.glmnet(as.matrix(X), as.factor(Y), family="binomial", alpha=0, standardize=FALSE, type.measure="class")
+g$lambda.min
+g$lambda.1se
+```
+
+Explication des termes erreur moyennes de validation croisée et écart-type associé à un $\lambda$. L'erreur moyenne de validation croisée est l'erreur obtenue pour chaque pas de validation croisée 10-Folds par la fonction et la prediction de la valeur laisser de côté (un des 10 Folds) et on calcul pour chaque validation croisée l'erreur moyenne, ainsi que l'écart type des erreurs par cette méthode.
+
+  v. Visualisation par tracer des lambdas
+
+```{r}
+plot(g)
+```
+
+On remarque que les $\lambda$ minimum et obtenue par mérthode 1se sont représentés par une ligne vertical. Le $\lambda$ 1se correspond au $\lambda$ dernier $\lambda$ dont l'erreur de classification moyenne se situe en-dessous de la borne supèrieur de l'écart type de l'erreur de reclassification du lambda minimum, pour s'en rendre compte, on peut tracer une ligne horizontal au niveau de cette borne supèrieur.
+
+  vi. Tracer manuelle avec ajout de la ligne vertical pour retrouver le $\lambda$ 1se
+
+```{r}
+plot(log(g$lambda), g$cvm, type = 'l', col='red', main = 'Tracer main de la courbe des erreurs de validation 5-Folds', xlab = 'log(lambda)', ylab = 'erreur de validation croisée')
+points(log(g$lambda), g$cvm+g$cvsd, col='green', pch=10)
+points(log(g$lambda), g$cvm-g$cvsd, col='green',pch=10)
+lines(log(g$lambda), rep(g$cvm[100]+g$cvsd[100], length(g$lambda)), col='black')
+abline(v=log(g$lambda.1se))
+abline(v=log(g$lambda.min))
+```
+
+  vii. Prédiction avec le $\lambda$ qui minimise l'erreur de validation
+  
+```{r}
+lambda_opt <- g$lambda.min
+g_opt <- glmnet(as.matrix(X[-1,]), as.vector(Y[-1]), family="binomial", alpha = 0, standardize = F, lambda = lambda_opt)
+prob <- predict(model, as.data.frame(X[1,]), type="response")
+if (prob <0.5){
+    pred=0
+}else {pred[i]=1}
+print("Valeur predite pour la première exploitation avec le lambda optimal")
+pred
+print("Vraie valeur de Y(1)")
+Y[1]
+print("Probabilité d'être défaillant")
+prob
+```
+
+
+### (c) Regression LASSO
+
+  i.Pour une grille de paramètre $\lambda$
+
+```{r}
+g <- glmnet(as.matrix(X), as.factor(Y), family="binomial",alpha=1,standardize = FALSE)
+g$lambda
+```
+
+  ii.Avec la fonction coef()
+  
+```{r}
+coef(g)[,1]# Pour la plus grande valeur de lambda
+coef(g)[,100] # Pour la plus petite valeur de lambda
+```
+
+Et on a bien que pour la plus grande valeur de $\lambda$ on a un plus grand nombre de paramètre dont la valeur est 0 tandis que pour la plus petite valeur de $\lambda$, un seul coéficient est réduit à 0.
+
+  iii. On plot les coéfficients par rapport à $\lambda$
+  
+```{r}
+plot(g, xvar='lambda')
+```
+
+On récupère donc les mêmes conclusions que plus haut, plus le $\lambda$ est petit, plus le nombre de coéficients retenues est petit, on finit avec uniquement 2 variables retenues, les chiffres au-dessus du graphes sont le nombre de variables retenues pour chaques valeurs de lambda.
+
+  iv. Choix du $\lambda$ par validation croisée
+
+```{r}
+g <- cv.glmnet(as.matrix(X), as.factor(Y), family="binomial", alpha=1, standardize=FALSE, type.measure="class")
+g$lambda.min
+g$lambda.1se
+```
+
+Explication des termes erreur moyennes de validation croisée et écart-type associé à un $\lambda$. L'erreur moyenne de validation croisée est l'erreur obtenue pour chaque pas de validation croisée 10-Folds par la fonction et la prediction de la valeur laisser de côté (un des 10 Folds) et on calcul pour chaque validation croisée l'erreur moyenne, ainsi que l'écart type des erreurs par cette méthode.
+
+  v. Verification graphique
+
+```{r}
+plot(g)
+```
+
+On peut dire que le modèle retenue avec le $\lambda$ 1se est plus parcimonieux que celui du $\lambda$ min car dans le premier cas on ne retient que 15 variables lorsque dans le second on en conserve 19.
+
+  vi. Modèle avec le $\lambda$ 1se
+  
+Les variables sélectionnès sont :
+
+```{r}
+coef(g,g$lambda.1se)
+```
+
+On conserve donc les coefficents de la constante, R1, R6, R14, R21 et R22.
+
+  vii. Prédiction avec ce modèle
+  
+```{r}
+lambda_opt <- g$lambda.1se
+g_opt <- glmnet(as.matrix(X[-1,]), as.vector(Y[-1]), family="binomial", alpha = 1, standardize = F, lambda = lambda_opt)
+prob <- predict(g_opt, as.matrix(X[1,]), type="response")
+if (prob <0.5){
+    pred=0
+}else {pred[i]=1}
+print("Valeur predite pour la première exploitation avec le lambda optimal")
+pred
+print("Vraie valeur de Y(1)")
+Y[1]
+print("Probabilité d'être défaillant")
+prob
+```
+
+
+## 3. Comparaison des modèles lda, wilks, glm et LASSO sur 50 découpages
+
+```{r}
+library(klaR)
+library(MASS)
+library(ROCR)
+B <- 50
+p <- ncol(data)-1
+err_test_lda <- rep(NA,B)
+err_test_wilks <- rep(NA,B)
+err_test_logistic <- rep(NA,B)
+err_test_lasso <- rep(NA,B)
+for (b in 1:B){
+tr <- sample(1:nrow(data),945)
+train <- data[tr,]
+test <- data[-tr,]
+g1 <- lda(DIFF~.,data=train)
+g2 <- greedy.wilks(DIFF~.,data=train)
+g3 <- glm(DIFF~., data = data.frame(train))
+g4 <- glmnet(as.matrix(train[,-1]), as.factor(train[,1]), family="binomial",alpha=1,standardize = FALSE)
+pred_lda <- predict(g1,test[,-1])$class
+err_test_lda[b] <- sum(pred_lda!=test$DIFF)/length(test$DIFF)
+pred_wilks <- predict(lda(g2$formula,data=train),test)$class
+err_test_wilks[b] <- sum(pred_wilks!=test$DIFF)/length(test$DIFF)
+prob_logistic <- predict(g3, as.data.frame(test[,-1]), type="response")
+pred_logistic <- rep(NA, length(prob_logistic))
+for (i in 1: length(prob_logistic)){
+  if (prob_logistic[i] <0.5){
+    pred_logistic[i]=0
+  }else {pred_logistic[i]=1}
+}
+err_test_logistic[b] <- sum(pred_logistic!=test$DIFF)/length(test$DIFF)
+prob_lasso <- predict(g4, s=lambda_opt, newx = as.matrix(test[,-1]), type="response")
+pred_lasso <- rep(NA, length(prob_lasso))
+for (i in 1: length(prob_lasso)){
+  if (prob_lasso[i] <0.5){
+    pred_lasso[i]=0
+  }else {pred_lasso[i]=1}
+}
+err_test_lasso[b] <- sum(pred_lasso!=test$DIFF)/length(test$DIFF)
+}
+boxplot(err_test_lda, err_test_wilks, err_test_logistic, err_test_lasso, main="Comparaison des méthodes de classification sur 50 découpages par boxplot du taux d'erreur", names=c("err_test_lda", "err_test_wilks", "err_test_logistic", "err_test_lasso"), ylim=c(0,0.2))
+```
+
+
+
